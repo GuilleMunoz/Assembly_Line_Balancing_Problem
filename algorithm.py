@@ -1,3 +1,4 @@
+import copy
 from random import sample, random
 from classes import Individual
 from functools import reduce
@@ -12,7 +13,7 @@ best = []
 graph = {}
 times = []
 stations = 32
-k = 0
+k = 18
 operations = 0
 
 
@@ -53,7 +54,7 @@ def rank_population(pop, gen):
         (list(Individual)): Sorted population
     """
     global graph, times, k
-    return sorted(pop, key=lambda x:x.calc_fitness(gen, graph, times, k=k*10) if x.fitness is 0 else x.fitness, reverse=False)
+    return sorted(pop, key=lambda x:x.calc_fitness(gen, graph, times, k=k*10, scalling_factor=0) if x.fitness is 0 else x.fitness, reverse=False)
 
 
 def select_by_tournament_(population):
@@ -83,7 +84,7 @@ def select_by_roulette(population, num=2):
     return np.random.choice(a=population, size=num, p=roulette)
 
 
-def engine(size=100, iterations=200,
+def engine(size=100, iterations=100,
            perc_elitism=0.1, perc_mat=0.1, sel_type='roulette', cross_type='SP',
            mutation_rate=0.05, mut_type='random'
            ):
@@ -96,19 +97,28 @@ def engine(size=100, iterations=200,
 
         best.append(population[0].fitness)
         mean.append(reduce(lambda x, y: x + y.fitness, population, 0)/size)
+        if population[0].gen < i - 50:
+            break
 
-        #Elitism
+        # Elitism
         new_generation = population[:int(perc_elitism*size)]
 
-        #Selection and crossover
-        for _ in range(int((size - int(perc_elitism*size))/2)):
-            # the_chosen_ones = [select_by_tournament(population), select_by_tournament(population)]
-            # the_chosen_ones = select_by_rank(population[:int(size*perc_mat)])
-            the_chosen_ones = select(population[:int(size * perc_mat)])
-            new_generation.extend(the_chosen_ones[0].crossover(the_chosen_ones[1]))
+        # Selection
+        the_chosen_ones = select(population[:int(size * perc_mat)], num=(size - int(perc_elitism*size)))
+
+        mut = 2
+        # Crossover
+        for j in range(0, len(the_chosen_ones), 2):
+
+            if j == len(the_chosen_ones) - 1:
+                new_generation.append(Individual(operations, stations, copy.deepcopy(the_chosen_ones[j].code),
+                                                 cross_type=cross_type, mut_type=mut_type))
+                mut = 1
+            else:
+                new_generation.extend(the_chosen_ones[j].crossover(the_chosen_ones[j+1]))
 
             # Mutation
-            for indv in new_generation[-2:]:
+            for indv in new_generation[-mut:]:
                 if random() < mutation_rate:
                     if mut_type == 'heur':
                         indv.mutate(graph)
@@ -124,6 +134,8 @@ def engine(size=100, iterations=200,
     print(f"Parameters of the best solution : {[i+1 for i in population[0].code]}")
     print(f"Best solution reached after {population[0].gen} generations.")
     print(f"Fitness of the best solution : {population[0].fitness}")
+
+    return population[0]
 
 
 def read_file(file_name):
@@ -150,83 +162,260 @@ def read_file(file_name):
     operations = len(times)
 
 
-if __name__ == '__main__':
+def compare_crossover():
+    '''
+    Compares crossover type
+    '''
+    global mean, best
 
-    read_file('data32.txt')
-    stations = 3
+    bests = []
 
-    engine(size=200, iterations=200,
-           perc_elitism=1/200, perc_mat=1, sel_type='roulette', cross_type='UX',
+    plt.figure(figsize=(6.8, 10))
+    plt.title("Crossover")
+    plt.xlabel('Generation', fontsize='large')
+    plt.ylabel('Fitness', fontsize='large')
+
+    engine(size=200, iterations=100,
+           perc_elitism=1 / 200, perc_mat=0.8, sel_type='roulette', cross_type='SP',
            mutation_rate=0.50, mut_type='heur')
 
-    best_heur = best
-    mean_heur = mean
+    plt.plot(mean, color='blue', linestyle=':')
+    plt.plot(best, label='Single Point', color='blue')
+    bests.append(best[-1])
+    best = []
+    mean = []
+
+    engine(size=200, iterations=100,
+           perc_elitism=1 / 200, perc_mat=0.8, sel_type='roulette', cross_type='DP',
+           mutation_rate=0.50, mut_type='heur')
+
+    plt.plot(mean, color='red', linestyle=':')
+    plt.plot(best, label='Double Point', color='red')
+    bests.append(best[-1])
+    best = []
+    mean = []
+
+    engine(size=200, iterations=100,
+           perc_elitism=1 / 200, perc_mat=0.8, sel_type='roulette', cross_type='UX',
+           mutation_rate=0.50, mut_type='heur')
+
+    plt.plot(mean, color='green', linestyle=':')
+    plt.plot(best, label='Uniform', color='green')
+    bests.append(best[-1])
+    ticks = sorted(list(plt.yticks()[0]) + bests)
+
+    i = 0
+    while i < len(ticks):
+        if ticks[i - 1] < ticks[i] <= ticks[i - 1] + 50:
+            if not ticks[i-1] in bests:
+                del ticks[i-1]
+            else:
+                del ticks[i]
+        elif ticks[i] <= ticks[i - 1] <= ticks[i] + 50:
+            if not ticks[i] in bests:
+                del ticks[i]
+            else:
+                del ticks[i-1]
+        else:
+            i += 1
+
+    plt.yticks(ticks)
+    plt.legend(frameon=False, fontsize='large')
+    plt.show()
+
+    best = []
+    mean = []
+
+
+def compare_selection():
+    '''
+    Compares selection type
+    '''
+    global mean, best
+
+    bests = []
+    plt.figure(figsize=(6.8, 10))
+    plt.title("Generation vs Fitness")
+    plt.xlabel('Generation', fontsize='large')
+    plt.ylabel('Fitness', fontsize='large')
+
+    engine(size=200, iterations=100,
+           perc_elitism=1 / 200, perc_mat=0.8, sel_type='roulette', cross_type='SP',
+           mutation_rate=0.50, mut_type='heur')
+
+    plt.plot(mean, color='blue', linestyle=':')
+    plt.plot(best, label='Roulette', color='blue')
+    bests.append(best[-1])
+    best = []
+    mean = []
+
+    engine(size=200, iterations=100,
+           perc_elitism=1 / 200, perc_mat=0.8, sel_type='rank', cross_type='SP',
+           mutation_rate=0.50, mut_type='heur')
+
+    plt.plot(mean, color='red', linestyle=':')
+    plt.plot(best, label='Rank', color='red')
+    bests.append(best[-1])
+    best = []
+    mean = []
+
+    engine(size=200, iterations=100,
+           perc_elitism=1 / 200, perc_mat=0.8, sel_type='tournament', cross_type='SP',
+           mutation_rate=0.50, mut_type='heur')
+
+    plt.plot(mean, color='green', linestyle=':')
+    plt.plot(best, label='Tournament', color='green')
+    bests.append(best[-1])
+    ticks = sorted(list(plt.yticks()[0]) + bests)
+
+    i = 0
+    while i < len(ticks):
+        if ticks[i - 1] < ticks[i] <= ticks[i - 1] + 50:
+            if not ticks[i - 1] in bests:
+                del ticks[i - 1]
+            else:
+                del ticks[i]
+        elif ticks[i] <= ticks[i - 1] <= ticks[i] + 50:
+            if not ticks[i] in bests:
+                del ticks[i]
+            else:
+                del ticks[i - 1]
+        else:
+            i += 1
+
+    plt.yticks(ticks)
+
+    plt.legend(frameon=False, fontsize='large')
+    plt.show()
+
+    best = []
+    mean = []
+
+
+def compare_mutation():
+    '''
+    Compares mutation type
+    '''
+    global mean, best
+
+    bests = []
+
+    plt.figure(figsize=(6.8, 10))
+    plt.title("Mutations types")
+    plt.xlabel('Generation', fontsize='large')
+    plt.ylabel('Fitness', fontsize='large')
+
+    engine(size=200, iterations=200,
+           perc_elitism=1 / 200, perc_mat=1, sel_type='roulette', cross_type='SP',
+           mutation_rate=0.50, mut_type='heur')
+
+    plt.plot(mean, color='blue', linestyle=':')
+    plt.plot(best, label='Heur', color='blue')
+    bests.append(best[-1])
     best = []
     mean = []
 
     engine(size=200, iterations=200,
-           perc_elitism=1 / 200, perc_mat=1, sel_type='roulette', cross_type='UX',
+           perc_elitism=1 / 200, perc_mat=1, sel_type='roulette', cross_type='SP',
            mutation_rate=0.50, mut_type='random')
 
-    best_random = best
-    mean_random = mean
+    plt.plot(mean, color='red', linestyle=':')
+    plt.plot(best, label='Random', color='red')
+    bests.append(best[-1])
     best = []
     mean = []
 
     engine(size=200, iterations=200,
-           perc_elitism=1 / 200, perc_mat=1, sel_type='roulette', cross_type='UX',
+           perc_elitism=1 / 200, perc_mat=1, sel_type='roulette', cross_type='SP',
            mutation_rate=0.50, mut_type='swap')
 
-    best_swap = best
-    mean_swap = mean
+    plt.plot(mean, color='green', linestyle=':')
+    plt.plot(best, label='Swap', color='green')
+    bests.append(best[-1])
     best = []
     mean = []
 
     engine(size=200, iterations=200,
-           perc_elitism=1 / 200, perc_mat=1, sel_type='roulette', cross_type='UX',
+           perc_elitism=1 / 200, perc_mat=1, sel_type='roulette', cross_type='SP',
            mutation_rate=0.50, mut_type='inversion')
 
-    best_inverse = best
-    mean_inverse = mean
+    plt.plot(mean, color='orange', linestyle=':')
+    plt.plot(best, label='Inversion', color='orange')
+    bests.append(best[-1])
     best = []
     mean = []
 
     engine(size=200, iterations=200,
-           perc_elitism=1 / 200, perc_mat=1, sel_type='roulette', cross_type='UX',
+           perc_elitism=1 / 200, perc_mat=1, sel_type='roulette', cross_type='SP',
            mutation_rate=0.50, mut_type='gaussian')
 
-    best_gaussian = best
-    mean_gaussian = mean
+    plt.plot(mean, color='black', linestyle=':')
+    plt.plot(best, label='Gaussian', color='black')
+    bests.append(best[-1])
     best = []
     mean = []
 
     engine(size=200, iterations=200,
-           perc_elitism=1 / 200, perc_mat=1, sel_type='roulette', cross_type='UX',
+           perc_elitism=1 / 200, perc_mat=1, sel_type='roulette', cross_type='SP',
            mutation_rate=0.50, mut_type='scramble')
-
-    plt.title("Generation vs Fitness")
-    plt.xlabel('Generation')
-    plt.ylabel('Fitness')
-
-    plt.plot(mean_heur, color='blue', linestyle=':')
-    plt.plot(best_heur, label='Heur', color='blue')
-
-    plt.plot(mean_random, color='red', linestyle=':')
-    plt.plot(best_random, label='Random', color='red')
-
-    plt.plot(mean_swap, color='green', linestyle=':')
-    plt.plot(best_swap, label='Swap', color='green')
-
-    plt.plot(mean_inverse, color='orange', linestyle=':')
-    plt.plot(best_inverse, label='Inversion', color='orange')
-
-    plt.plot(mean_gaussian, color='black', linestyle=':')
-    plt.plot(best_gaussian, label='Gaussian', color='black')
 
     plt.plot(mean, color='purple', linestyle=':')
     plt.plot(best, label='Scramble', color='purple')
+    bests.append(best[-1])
+    ticks = sorted(list(plt.yticks()[0]) + bests)
 
-    plt.legend(frameon=False)
+    i = 0
+    while i < len(ticks):
+        if ticks[i - 1] < ticks[i] <= ticks[i - 1] + 50:
+            if not ticks[i - 1] in bests:
+                del ticks[i - 1]
+            else:
+                del ticks[i]
+        elif ticks[i] <= ticks[i - 1] <= ticks[i] + 50:
+            if not ticks[i] in bests:
+                del ticks[i]
+            else:
+                del ticks[i - 1]
+        else:
+            i += 1
+
+    plt.yticks(ticks)
+
+    plt.legend(frameon=False, fontsize='large')
     plt.show()
+    best = []
+    mean = []
 
+
+if __name__ == '__main__':
+    read_file('data32.txt')
+    stations = 5
+    plt.figure(figsize=(6.8, 10))
+    plt.title("Generation vs Fitness")
+    plt.xlabel('Generation', fontsize='large')
+    plt.ylabel('Fitness', fontsize='large')
+
+    while (True):
+
+        best = []
+        mean = []
+
+        my_best = engine(size=200, iterations=200,
+                  perc_elitism=10 / 200, perc_mat=0.5, sel_type='roulette', cross_type='SP',
+                  mutation_rate=0.20, mut_type='heur')
+
+        print('aqui sigo')
+        if my_best.fitness < 175:
+            break
+
+
+    plt.plot(mean, color='blue', linestyle=':')
+    plt.plot(best, color='blue')
+
+    plt.yscale('log')
+    #plt.yticks(list(set([i if i > 0 else 0 for i in list(plt.yticks()[0]) + [my_best]])))
+    plt.yticks([my_best.fitness, 1000, 10000], [str(my_best.fitness), r'$10^3$', r'$10^4$'])
+
+    plt.show()
+    print(reduce(lambda x, y: x + y, times, 1)/stations)
 
