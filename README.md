@@ -39,6 +39,3 @@ if __name__ == '__main__':
 
     compare_selection(k, num_op, graph, times)
 ```
-
-## Documentation
-
