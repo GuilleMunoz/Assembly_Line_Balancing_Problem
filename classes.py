@@ -52,8 +52,9 @@ class Individual:
         Calculates the number of precedence violations
 
         Args:
-            graph(dict): precedence graph of the problem
-        Return:
+            graph (dict): precedence graph of the problem
+
+        Returns:
             (int)
         """
         violations = 0
@@ -68,8 +69,11 @@ class Individual:
         Calculates fitness of the code.
 
         Args:
-            graph(dict): precedence graph of the problem
-            k(float): time of slowest operations
+            gen (int): current generation
+            graph (dict): precedence graph of the problem
+            k (float): time of slowest operations (it can be scaled)
+            times (list(float)): list containing the times of each operation
+
         Returns:
             (float)
         """
@@ -137,12 +141,6 @@ class Individual:
         self.fitness = 0
 
 
-    def mutate_gaussian(self):
-
-        i = randint(0, self.operations - 1)
-        self.code[i] += randint(0, self.stations - 1 - self.code[i])
-        self.fitness = 0
-
 
     def crossover_SP(self, indv):
 
@@ -179,7 +177,6 @@ class Individual:
                          cross_type=self.crossover.__name__[-2:],
                          mut_type=self.mutate.__name__.split('_')[-1])
         return ch1, ch2
-
 
     def crossover_UX(self, indv):
 
